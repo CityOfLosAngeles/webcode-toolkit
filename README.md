@@ -79,10 +79,10 @@ Once enabled, the Drupal module offers the following ways to further customize t
 Coming soon!
 
 ##Authors
-Ki Kim (kkim@urbaninsight.com)
-Mark Etter (etter@urbaninsight.com)
+* Ki Kim (kkim@urbaninsight.com)
+* Mark Etter (etter@urbaninsight.com)
 
 ##License
 Released under the GNU General Public License, version 2 (or higher).
 
-Copyright (c) 2016 City of Los Angles.
+Copyright (c) 2016 City of Los Angeles.
