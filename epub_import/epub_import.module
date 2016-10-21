@@ -1,0 +1,55 @@
+<?php
+/**
+ * @file
+ * Code for Epub Import.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function epub_import_permission() {
+  return array(
+    'administer epub import' => array(
+      'title' => t('Administer Epub Import'),
+      'description' => t('View Epub Import settings page.'),
+    ),
+
+    'import epubs' => array(
+      'title' => t('Import Epub files'),
+      'description' => t('Upload and import epub files.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function epub_import_menu() {
+  $items['admin/config/media/epub-import'] = array(
+    'title' => 'Epub Import',
+    'description' => 'Configure Epub Import settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('epub_import_admin_settings'),
+    'access arguments' => array('administer epub import'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'epub_import.admin.inc',
+  );
+
+  $items['admin/epub-import'] = array(
+    'title' => 'Import Epub Files',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('epub_import_import_form'),
+    'access arguments' => array('import epubs'),
+    'type' => MENU_SUGGESTED_ITEM,
+    'file' => 'epub_import.import.inc',
+  );
+
+  return $items;
+}
+
+function epub_import_is_configured() {
+  return (bool)variable_get('epub_import_node_type', '')
+      && (bool)variable_get('epub_import_text_format', '')
+      && (bool)variable_get('epub_import_image_style', '')
+      && (bool)variable_get('epub_import_class_prefix', '');
+}
