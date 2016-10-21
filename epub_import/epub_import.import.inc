@@ -125,19 +125,24 @@ function epub_import_import_form_submit($form, $form_state) {
   drupal_set_message('Epub imported and parsed successfully.');
 }
 
+/**
+ * Return parsed HTML from epub file.
+ */
 function epub_import_parse_epub($epub) {
   if (!$fp = epub_import_open_epub($epub)) {
     return FALSE;
   }
-
-  $list = $table = array();
+  
+  $html = $list = $table = array();
   $list_mode = $table_mode = FALSE;
+  $level = '';
 
   while ($data = fgets($fp)) {
     $line = trim($data);
     
-    // Heading found.
-    if (in_array(substr($line, 0, 4), array('<h1>', '<h2>', '<h3>'))) {
+    // Heading found (article, division, section). Don't check class Heading-1
+    // as it is confusing with Heading-10.
+    if (preg_match('#^<h[123].+</h[123]>$#', $line) or preg_match('#^<p class="Heading-[23].+</p>$#', $line))  {
       // Process unfinished lists that came before the headings.
       if ($list_mode and !empty($list)) {
         $html[$unit_id]['body'] .= _epub_import_render_ordered_list($list);
@@ -154,7 +159,7 @@ function epub_import_parse_epub($epub) {
       $html[$unit_id]['body'] = '';
       $html[$unit_id]['terms'] = array();
 
-      _epub_import_next_node_id(TRUE);
+      _epub_import_current_node_id($unit_id);
     }
     elseif ($clean_line = _epub_import_clean_line($line)) {
       $list_type = _epub_import_get_list_class($line);
@@ -400,6 +405,9 @@ function _epub_import_clean_list_item($item) {
   return trim($item);
 }
 
+/**
+ * Clean up parsed line.
+ */
 function _epub_import_clean_line($line) {
   static $except = '<table><colgroup><col><thead><tbody><th><tr><td><img><a><em>';
 
@@ -412,16 +420,23 @@ function _epub_import_clean_line($line) {
   return trim($line);
 }
 
-function _epub_import_next_node_id($reset = FALSE) {
-  $nid = &drupal_static(__FUNCTION__);
+/**
+ * Setter and getter for zoning code unit id currently worked on in order to
+ * keep track of it from different locations in the code.
+ */
+function _epub_import_current_node_id($unit_id = NULL) {
+  $id = &drupal_static(__FUNCTION__);
 
-  if ($reset) {
-    $nid = db_query("SELECT MAX(nid) FROM {node}")->fetchField() + 1;
+  if ($unit_id) {
+    $id = $unit_id;
   }
 
-  return !empty($nid) ? $nid : FALSE;
+  return $id;
 }
 
+/**
+ * Setter and getter for keeping track of current file being worked on.
+ */
 function _epub_import_current_file_key($file_key = NULL) {
   $key = &drupal_static(__FUNCTION__);
 
@@ -432,7 +447,9 @@ function _epub_import_current_file_key($file_key = NULL) {
   return $key;
 }
 
-
+/**
+ * Parse term names with proper class names.
+ */
 function _epub_import_parse_terms(&$content, $line) {
   preg_match_all('#<span class="' . variable_get('epub_import_class_prefix', '') . '-term-([^"]+)">(.+?)</span>#', $line, $match);
 
@@ -452,6 +469,11 @@ function _epub_import_parse_terms(&$content, $line) {
   }
 }
 
+/**
+ * Strip attributes off given string keeping allowed list.
+ * 
+ * Src: http://stackoverflow.com/questions/770219/how-can-i-remove-attributes-from-an-html-tag
+ */
 function _epub_import_strip_attrs($str) {
   static $allow = array('src', 'colspan', 'rowspan', 'href', 'data-toggle', 'data-type', 'data-title', 'data-content');
 
