@@ -25,23 +25,28 @@ function epub_import_permission() {
  * Implements hook_menu().
  */
 function epub_import_menu() {
-  $items['admin/config/media/epub-import'] = array(
-    'title' => 'Epub Import',
-    'description' => 'Configure Epub Import settings.',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('epub_import_admin_settings'),
-    'access arguments' => array('administer epub import'),
-    'type' => MENU_NORMAL_ITEM,
-    'file' => 'epub_import.admin.inc',
-  );
-
-  $items['admin/epub-import'] = array(
-    'title' => 'Import Epub Files',
+  $items['admin/config/content/epub-import'] = array(
+    'title' => 'Epub import',
+    'description' => 'Import Epub files.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('epub_import_import_form'),
     'access arguments' => array('import epubs'),
-    'type' => MENU_SUGGESTED_ITEM,
+    'type' => MENU_NORMAL_ITEM,
     'file' => 'epub_import.import.inc',
+  );
+
+  $items['admin/config/content/epub-import/import'] = array(
+    'title' => 'Import',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['admin/config/content/epub-import/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('epub_import_admin_settings'),
+    'access arguments' => array('administer epub import'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'epub_import.admin.inc',
   );
 
   return $items;

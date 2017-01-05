@@ -114,15 +114,23 @@ function epub_import_import_form_validate($form, &$form_state) {
  * Submit handler for form epub_import_import_form().
  */
 function epub_import_import_form_submit($form, $form_state) {
+  $parse_count = 0;
+
   foreach (array_keys($form_state['files']) as $epub) {
     _epub_import_current_file_key($epub);
     
     if ($parsed = epub_import_parse_epub($epub)) {
       epub_import_save_nodes($parsed);
+      $parse_count++;
     }
   }
 
-  drupal_set_message('Epub imported and parsed successfully.');
+  if ($parse_count == count($form_state['files'])) {
+    drupal_set_message('Epub imported and parsed successfully.');
+  }
+  else {
+    drupal_set_message('Some Epub(s) not parsed.', 'error');
+  }
 }
 
 /**
@@ -153,7 +161,7 @@ function epub_import_parse_epub($epub) {
       list($level, $unit_id, $title) = _epub_import_parse_heading(strip_tags($line));
 
       $html[$unit_id]['level']   = $level;
-      $html[$unit_id]['title']   = strip_tags($line);
+      $html[$unit_id]['title']   = htmlspecialchars_decode(strip_tags($line));
       $html[$unit_id]['content'] = '';
       $html[$unit_id]['terms']   = array();
 
@@ -318,7 +326,7 @@ function epub_import_open_epub($epub) {
   }
 
   foreach (scandir($path) as $file) {
-    if ('xhtml' == pathinfo($file, PATHINFO_EXTENSION)) {
+    if ('xhtml' == pathinfo($file, PATHINFO_EXTENSION) and $file != 'cover.xhtml') {
       $xml_file_name = $file;
       break;
     }
@@ -696,7 +704,7 @@ function _epub_import_clean_img($line) {
     $img_dest = $system_path . '/' . $img_name;
 
     if (!file_exists($system_path) && !is_dir($system_path)) {
-      mkdir($system_path, 0777, TRUE);
+      drupal_mkdir($system_path, NULL, TRUE);
     }
 
     $dest = file_unmanaged_copy("$epub_path/$src", $img_dest, FILE_EXISTS_RENAME);
