@@ -13,7 +13,7 @@ define('EPUB_IMPORT_TEMP_PATH', variable_get('file_temporary_path', file_directo
 function epub_import_import_form() {
   if (!epub_import_is_configured()) {
     $form['need_config'] = array(
-      '#markup' => l(t('Configure Epub import settings to start importing.'), 'admin/config/media/epub-import'),
+      '#markup' => l(t('Configure Epub import settings to start importing.'), 'admin/config/content/epub-import/settings'),
     );
 
     return $form;
@@ -692,7 +692,7 @@ function _epub_import_clean_img($line) {
 
   $epub_path   = EPUB_IMPORT_TEMP_PATH . '/' . _epub_import_current_file_key() . '/OEBPS';
   $image_path  = variable_get('epub_import_image_folder', 'epub_images');
-  $system_path = variable_get('file_public_path') . '/' . $image_path;
+  $system_path = variable_get('file_public_path', 'sites/default/files') . '/' . $image_path;
 
   // Ignore image with inline data.
   if (strpos($line, 'src="data:image')) {
@@ -704,7 +704,7 @@ function _epub_import_clean_img($line) {
     $img_dest = $system_path . '/' . $img_name;
 
     if (!file_exists($system_path) && !is_dir($system_path)) {
-      drupal_mkdir($system_path, NULL, TRUE);
+      drupal_mkdir($system_path, 0775, TRUE);
     }
 
     $dest = file_unmanaged_copy("$epub_path/$src", $img_dest, FILE_EXISTS_RENAME);
