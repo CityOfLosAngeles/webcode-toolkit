@@ -394,6 +394,10 @@ function epub_import_save_node($content) {
     'format' => variable_get('epub_import_text_format', 'full_html'),
   );
 
+  if ($book_id = variable_get('epub_import_book_id', 0)) {
+    $node->book['bid'] = $book_id;
+  }
+
   _epub_import_attach_terms($node, $content);
 
   node_save($node);

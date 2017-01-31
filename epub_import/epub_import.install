@@ -16,4 +16,5 @@ function epub_import_uninstall() {
   variable_del('epub_import_terms');
   variable_del('epub_import_image_folder');
   variable_del('epub_import_class_prefix');
+  variable_del('epub_import_book_id');
 }

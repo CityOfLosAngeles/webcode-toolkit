@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Bookshow feature.
+ */
+
+include_once 'bookshow.features.inc';

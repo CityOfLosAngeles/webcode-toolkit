@@ -12,12 +12,34 @@ function epub_import_admin_settings() {
     );
   }
 
+  $types = node_type_get_names();
+  $allowed = variable_get('book_allowed_types', array('book'));
+  $types = array_filter($types, function ($val) use ($allowed) {
+    return in_array($val, $allowed);
+  }, ARRAY_FILTER_USE_KEY);
   $form['epub_import_node_type'] = array(
     '#type' => 'radios',
     '#title' => t('Import Epub as'),
     '#default_value' => variable_get('epub_import_node_type', ''),
-    '#options' => node_type_get_names(),
+    '#options' => $types,
+    '#description' => t('You can enable !books to other content types.', array('!books' => l('book outlines', 'admin/content/book/settings'))),
     '#required' => TRUE,
+  );
+
+  epub_import_check_book();
+
+  $options = array(0 => '<' . t('none') . '>');
+  foreach (book_get_books() as $book) {
+    $options[$book['nid']] = $book['title'];
+  }
+
+  // Add a drop-down to select the destination book.
+  $form['epub_import_book_id'] = array(
+    '#type' => 'select',
+    '#title' => t('Book'),
+    '#default_value' => variable_get('epub_import_book_id', 0),
+    '#options' => $options,
+    '#description' => t('Your new upload will be a part of the selected book.'),
   );
 
   $form['epub_import_header_level'] = array(
@@ -99,4 +121,23 @@ function epub_import_admin_settings() {
   );
 
   return system_settings_form($form);
+}
+
+/**
+ * Create first top level book if needed.
+ */
+function epub_import_check_book() {
+  if (!book_get_books()) {
+    $book = new stdClass();
+    $book->language = LANGUAGE_NONE;
+    $book->type = 'book';
+    $book->is_new = TRUE;
+    $book->uid = 1;
+
+    $book->title = 'Book One';
+    $book->book['bid'] = 'new';
+    $book = node_submit($book);
+
+    node_save($book);
+  }
 }
