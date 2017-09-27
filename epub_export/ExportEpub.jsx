@@ -2,10 +2,9 @@
  * JSX to export Indesign to Epub
  *
  * Author: Ki Kim, Urban Insight
- * Date: 06/03/2015
- * Version: 0.3
+ * Date: 09/27/2017
+ * Version: 1.0
  *
- * Ref: Case 41248
  * Ref: http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/indesign/sdk/cs6/scripting/InDesign_ScriptingGuide_JS.pdf
  */
 
@@ -18,11 +17,9 @@ Date.prototype.yyyymmdd = function() {
 
 var myDocument = app.documents.item(0);
 var today = (new Date()).yyyymmdd();
-var articleNo = app.activeDocument.paragraphStyles.itemByName('Heading 1').numberingStartAt;
-articleNo = articleNo > 9 ? articleNo.toString() : '0' + articleNo.toString();
 
 var desktop = Folder.desktop.fullName;
-var fileName = today + '-Article' + articleNo + '.epub';
+var fileName = today + '.epub';
 
 with (myDocument.epubExportPreferences) {
   bulletExportOption = BulletListExportOption.AS_TEXT;
