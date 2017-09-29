@@ -40,7 +40,7 @@ The use of the WebCode Toolkit requires both a copy of InDesign and a Drupal web
 
 ### Directory structure
 ```
-bookshow/		= Drupal module
+bookshow/       = Drupal module
 epub_export/    = Location of the InDesign script
 epub_import/    = Drupal module
 ```
