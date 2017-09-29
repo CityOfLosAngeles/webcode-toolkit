@@ -20,17 +20,17 @@ In an effort to contribute key components of this Web-Based Zoning Code project 
 
 ## Features
 
-### Epub Export Plugin
+### Epub Export Script
 This script automates the process to export the content in the InDesign file as an Epub format.
 
 ### Epub Import Module
-This module allows an Epub file to be uploaded to a Drupal site and have content nodes generated with the text and images content contained within.  
+This module allows an Epub file to be uploaded to a Drupal site and have content nodes generated with the text and images content contained within. 
+
+### Bookshow Module
+The bookshow module extends the epub_import module to take advantage of the display and navigation features made available by the Book module available in Drupal core. Now when Epub content is imported into a Book in Drupal, the Book's navigation is also built out on the fly following the header hierarchy.
 
 ### InDesign Tagging
-InDesign allows an editor to include a class to specific tags in the document styles. This is done from the Export Tagging screen on the Character Style and Paragraph Style options menu. Using this, it is possible to send custom metadata about the InDesign document to Drupal. The following classes are currently supported:
-
-* ol for ordered lists
-* ul for unordered lists
+InDesign allows an editor to include a class to specific tags in the document styles. This is done from the Export Tagging screen on the Character Style and Paragraph Style options menu. Using this, it is possible to send custom metadata about the InDesign document to Drupal.
 
 ## Installation
 The use of the WebCode Toolkit requires both a copy of InDesign and a Drupal website installed. To learn more about these applications please visit the following sites:
@@ -40,6 +40,7 @@ The use of the WebCode Toolkit requires both a copy of InDesign and a Drupal web
 
 ### Directory structure
 ```
+bookshow/		= Drupal module
 epub_export/    = Location of the InDesign script
 epub_import/    = Drupal module
 ```
@@ -51,24 +52,40 @@ Additional information can be found here:
 * https://helpx.adobe.com/indesign/using/scripting.html
 
 ### Drupal
-To install the Drupal module, place the epub_import folder and all of it's contents into the sites/all/modules/ directory of your Drupal installation. Then you need to enable the module on the site's Module Administration page (/admin/modules).
+To install the Drupal modules, place the module's folder and all of it's contents into the sites/all/modules/ directory of your Drupal installation. Then you need to enable the module on the site's Module Administration page (/admin/modules).
 
 Additional information can be found here:
 * https://www.drupal.org/docs/7/extending-drupal-7/installing-drupal-7-contributed-modules
 
-Once installed, Epub files can be imported into Drupal from here:
-* /admin/epub-import
+## Importing an Epub File
+Once the epub_import module is installed, Epub files can be imported into Drupal from here:
+* /admin/config/content/epub-import
+
+If you have the dashboard module installed, you may also place a block labeled "Epub Import: Import form" on the Dashboard page to import the content into Drupal.
+
+The import form has the following options:
+
+* Upload file(s): A file upload field that accepts a .epub file.
+* Book: If you have enabled the bookshow module, this option lets you select a Book previously created in Drupal to import the content into.
+* Header level: Select the header tag used in your Epub file that will interpreted as node titles in Drupal.
+* Publishing options: This selector lets you decide what to do if duplicate content is discovered (either create new content or replace existing). If you have enabled the bookshow module and selected to replace existing content, you are asked to specify which top level book section you wish to replace.
 
 ## Configuration options
 
-### InDesign HTML Tags
-Using InDesign’s own features you can define HTML elements that get included in the Epub file from the character styles. While in the Character Styles window click the Export Tagging menu link to customize the options for "Epub and HTML”. 
+### InDesign Export Tagging
+Using InDesign’s own features you can define HTML elements that get included in the Epub file from the character styles. While in the Paragraph or Character Styles window click the Export Tagging menu link to customize the options for "Epub and HTML”. 
 
-* Tag: Select “span” to properly export the tags to the Epub file.
-* Class: Insert a class name you want included with this particular character style. 
+* Tag: Select the desired HTML tag to include it with the content in the Epub file.
+* Class: Enter a class name you want included with this particular style. 
 
-### Drupal Module
-Once enabled, the Drupal module offers the following ways to further customize the feature:
+The following classes are currently supported:
+
+* ol (used for ordered lists)
+* ul (used for unordered lists)
+* taxonomy_* (used for Drupal taxonomy terms; the * is a placeholder for the vocabulary's field name)
+
+### Epub Import Module
+Once enabled, the module offers the following ways to further customize the feature:
 
 * Import Epub as: Select the content type that should be used when an Epub file is imported.
 * Text format: Select the default Drupal text format for imported text content.
