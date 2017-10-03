@@ -13,11 +13,11 @@ function bookshow_block_info() {
   $blocks = array();
 
   $blocks['bookshow_book_nav'] = array(
-    'info' => t('Webcode Book navigation'),
+    'info' => t('Bookshow Book navigation'),
   );
 
   $blocks['bookshow_book_nav_pager'] = array(
-    'info' => t('Webcode Book navigation pager'),
+    'info' => t('Bookshow Book navigation pager'),
   );
 
   return $blocks;
@@ -43,7 +43,7 @@ function bookshow_book_nav_block() {
 /**
  * Code borrowed from template_preprocess_book_navigation().
  * Ctools' implementation combined tree and page in one block. We've splitted it
- * to 'Webcode Book navigation' and 'Webcode Book navigation pager'
+ * to 'Bookshow Book navigation' and 'Bookshow Book navigation pager'
  */
 function bookshow_book_nav_pager_block() {
   $node = menu_get_object();
