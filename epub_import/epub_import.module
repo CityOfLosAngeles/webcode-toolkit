@@ -4,6 +4,12 @@
  * Code for Epub Import.
  */
 
+include_once 'epub_import.import.inc';
+include_once 'epub_import.form.inc';
+include_once 'epub_import.block.inc';
+
+define('EPUB_IMPORT_TEMP_PATH', variable_get('file_temporary_path', file_directory_temp()) . '/epub-import');
+
 /**
  * Implements hook_permission().
  */

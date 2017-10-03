@@ -5,200 +5,60 @@
  * Epub Import page.
  */
 
-define('EPUB_IMPORT_TEMP_PATH', variable_get('file_temporary_path', file_directory_temp()) . '/epub-import');
-
 /**
- * Menu callback for 'admin/epub-import'
- */
-function epub_import_import_form() {
-  if (!epub_import_is_configured()) {
-    $form['need_config'] = array(
-      '#markup' => l(t('Configure Epub import settings to start importing.'), 'admin/config/content/epub-import/settings'),
-    );
-
-    return $form;
-  }
-
-  $heading_level = variable_get('epub_import_header_level', 'h1');
-
-  $instruction =<<<INSTR
-    <h3>Upload tips:</h3>
-    <ul>
-      <li>You can select multiple files by Ctrl+Click (⌘+Clicl for Mac)</li>
-      <li>Heading level (currently set to '$heading_level') determines how many node are created.</li>
-    </ul>
-INSTR;
-
-  $form['instruction'] = array(
-    '#markup' => $instruction,
-  );
-
-  $form['import'] = array(
-    '#type' => 'file',
-    '#title' => t('Upload file(s)'),
-    '#name' => 'files[]',
-    '#attributes' => array('multiple' => 'multiple'),
-  );
-
-  $form['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Submit'),
-  );
-
-  return $form;
-}
-
-/**
- * Validator for form epub_import_import_form().
- */
-function epub_import_import_form_validate($form, &$form_state) {
-  $errors = $epub_files = array();
-  $files = $_FILES['files'];
-
-  if (!is_dir(EPUB_IMPORT_TEMP_PATH)) {
-    mkdir(EPUB_IMPORT_TEMP_PATH, 0755, TRUE);
-  }
-
-  // Clear temp folder first.
-  if (system('rm -rf ' . EPUB_IMPORT_TEMP_PATH . '/*') === FALSE) {
-    form_set_error('', 'Temporary directory not writable. Contact site administrator before proceeding.');
-    return;
-  }
-
-  for ($i = 0; $i < count($files['name']); $i++) {
-    if ($files['size'][$i]) {
-      if ($files['type'][$i] != 'application/epub+zip') {
-        $errors[] = t('<b>!file</b> is not an epub format.', array('!file' => $files['name'][$i]));
-        continue;
-      }
-      elseif (!empty($files['error'][$i])) {
-        $errors[] = t('<b>!file</b>: upload error (code !code).', array('!code' => $files['error'][$i]));
-        continue;
-      }
-      elseif (empty($errors)) {
-        $file_path = EPUB_IMPORT_TEMP_PATH . '/' . $files['name'][$i];
-        move_uploaded_file($files['tmp_name'][$i], $file_path);
-        $epub_files["file$i"] = $files['name'][$i];
-      }
-    }
-  }
-
-  if ($errors) {
-    foreach ($errors as $error) {
-      form_set_error('', $error);
-    }
-  }
-  elseif ($epub_files) {
-    // Unzip epub files.
-    try {
-      foreach ($epub_files as $key => $file_name) {
-        $zip = new ZipArchive();
-        $zip->open(EPUB_IMPORT_TEMP_PATH . '/' . $file_name);
-        $zip->extractTo(EPUB_IMPORT_TEMP_PATH . '/' . $key);
-        $zip->close();
-      }
-    }
-    catch (Exception $ex) {
-      form_set_error('', 'File unarchiving error.');
-      return;
-    }
-
-    $form_state['files'] = $epub_files;
-  }
-  else {
-    form_set_error('', 'No files uploaded to process.');
-  }
-}
-
-/**
- * Submit handler for form epub_import_import_form().
- */
-function epub_import_import_form_submit($form, $form_state) {
-  $parse_count = 0;
-
-  foreach (array_keys($form_state['files']) as $epub) {
-    _epub_import_current_file_key($epub);
-    
-    if ($parsed = epub_import_parse_epub($epub)) {
-      epub_import_save_nodes($parsed);
-      $parse_count++;
-    }
-  }
-
-  if ($parse_count == count($form_state['files'])) {
-    drupal_set_message('Epub imported and parsed successfully.');
-  }
-  else {
-    drupal_set_message('Some Epub(s) not parsed.', 'error');
-  }
-}
-
-/**
- * Return parsed HTML from epub file.
+ * @return array
+ *   Array of parsed XML from epub file.
  */
 function epub_import_parse_epub($epub) {
   if (!$fp = epub_import_open_epub($epub)) {
     return FALSE;
   }
   
-  $html = $list = $table = array();
+  $parsed = $list = $table = array();
   $list_mode = $table_mode = FALSE;
-  $level = '';
 
   while ($data = fgets($fp)) {
     $line = trim($data);
 
-    // Heading found (article, division, section). Don't check class Heading-1
-    // as it is confusing with Heading-10.
-    if (preg_match('#^<h[123].+</h[123]>$#', $line) or preg_match('#^<p class="Heading-[23].+</p>$#', $line)) {
+    // Heading found.
+    if (preg_match('#^<h[123].+</h[123]>$#', $line)) {
       // Process unfinished lists that came before the headings.
       if ($list_mode and !empty($list)) {
-        $html[$unit_id]['content'] .= _epub_import_render_ordered_list($list);
+        $parsed[$heading_id]['content'] .= _epub_import_render_list($list);
         $list = array();
         $list_mode = FALSE;
       }
 
-      list($level, $unit_id, $title) = _epub_import_parse_heading(strip_tags($line));
+      list($heading, $title) = _epub_import_parse_heading($line);
 
-      $html[$unit_id]['level']   = $level;
-      $html[$unit_id]['title']   = htmlspecialchars_decode(strip_tags($line));
-      $html[$unit_id]['content'] = '';
-      $html[$unit_id]['terms']   = array();
+      $heading_id = _epub_import_current_unit_id($heading);
 
-      _epub_import_current_node_id($unit_id);
-    }
-    // Webcode token on its own line.
-    elseif (strpos($line, 'webcode:') !== FALSE) {
-      // Article is already recognized by <h1>, so no need (for now).
+      $parsed[$heading_id]['heading'] = $heading;
+      $parsed[$heading_id]['title']   = $title;
+      $parsed[$heading_id]['content'] = '';
+      $parsed[$heading_id]['terms']   = array();
     }
     elseif ($clean_line = _epub_import_clean_line($line)) {
-      $list_type = _epub_import_get_list_class($line);
+      list($list_level, $list_type) = _epub_import_get_list_class($line);
 
-      if ($list_type == 'L1') {
-        $list[] = 'L1: ' . $clean_line;
+      if (in_array($list_level, array('L1', 'L2', 'L3', 'L4', 'L5', 'L6'))) {
+        $list[] = $list_level . ':' . $list_type . ':' . $clean_line;
         $list_mode = TRUE;
       }
-      elseif ($list_type == 'L2') {
-        $list[] = 'L2: ' . $clean_line;
+      elseif ($list_level == 'UL') {
+        $list[] = $list_level . ':' . $list_type . ':' . $clean_line;
         $list_mode = TRUE;
       }
-      elseif ($list_type == 'L3') {
-        $list[] = 'L3: ' . $clean_line;
-        $list_mode = TRUE;
+      elseif (in_array($list_level, array('h4', 'h5', 'h6'))) {
+        if ($list_mode and !empty($list)) {
+          $parsed[$heading_id]['content'] .= _epub_import_render_list($list);
+          $list = array();
+          $list_mode = FALSE;
+        }
+
+        $parsed[$heading_id]['content'] .= "<$list_level>$clean_line</$list_level>";
       }
-      elseif ($list_type == 'L4') {
-        $list[] = 'L4: ' . $clean_line;
-        $list_mode = TRUE;
-      }
-      elseif ($list_type == 'L5') {
-        $list[] = 'L5: ' . $clean_line;
-        $list_mode = TRUE;
-      }
-      elseif ($list_type == 'L6') {
-        $list[] = 'L6: ' . $clean_line;
-        $list_mode = TRUE;
-      }
-      elseif ($list_type == 'EOF') {
+      elseif ($list_level == 'EOF') {
         break;
       }
       else {
@@ -281,40 +141,43 @@ function epub_import_parse_epub($epub) {
           $table[] = $clean_line;
         }
 
-        if ($table_mode) continue;
-
-        if ($list_mode) {
-          if (!empty($table) and !empty($unit_id)) {
-            $list[] = join('', $table);
-            $table = array();
+        if (!$table_mode) {
+          if ($list_mode) {
+            if (!empty($table) and !empty($heading_id)) {
+              $list[] = join('', $table);
+              $table = array();
+            }
+            else {
+              $list[] = $clean_line;
+            }
           }
-          else {
-            $list[] = $clean_line;
-          }
-        }
-        elseif (!empty($unit_id)) {
-          if (!empty($table)) {
-            $html[$unit_id]['content'] .= join('', $table);
-            $table = array();
-          }
-          else {
-            $html[$unit_id]['content'] .= $clean_line;
+          elseif (!empty($heading_id)) {
+            if (!empty($table)) {
+              $parsed[$heading_id]['content'] .= join('', $table);
+              $table = array();
+            }
+            /*elseif (in_array($list_level, array('h4', 'h5', 'h6'))) {
+              $parsed[$heading_id]['content'] .= "<$list_level>$clean_line</$list_level>";
+            }*/
+            else {
+              $parsed[$heading_id]['content'] .= $clean_line;
+            }
           }
         }
       }
+    }
 
-      // Parse terms.
-      if (epub_import_get_level($level) == 'Section') {
-        _epub_import_parse_terms($html[$unit_id], $line);
-      }
+    // TODO: Parse terms. # Should it always happen at h3 level? 
+    if (!empty($heading) and $heading == 'h3') {
+      _epub_import_parse_terms($parsed[$heading_id], $line);
     }
   }
 
   if ($list_mode and !empty($list)) {
-    $html[$unit_id]['content'] .= _epub_import_render_ordered_list($list);
+    $parsed[$heading_id]['content'] .= _epub_import_render_list($list);
   }
 
-  return $html;
+  return $parsed;
 }
 
 function epub_import_open_epub($epub) {
@@ -360,27 +223,28 @@ function epub_import_save_nodes(&$parsed) {
 function epub_import_collapse(&$parsed) {
   $header_level = variable_get('epub_import_header_level', 'h1');
 
-  foreach ($parsed as $key => $content) {
-    $heading = epub_import_to_heading($content['level']);
-
-    if ($heading < $header_level) {
-      unset($parsed[$key]);
+  foreach ($parsed as $heading_id => $data) {
+    if ($data['heading'] < $header_level) {
+      // Leave the data as is.
     }
-    elseif ($heading == $header_level) {
-      $prev_key = $key;
+    elseif ($data['heading'] == $header_level) {
+      $prev_heading_id = $heading_id;
     }
-    elseif (!empty($prev_key)) {
-      $h = epub_import_to_heading($parsed[$key]['level']);
-      $parsed[$prev_key]['content'] .= "\n<$h>{$parsed[$key]['title']}</$h>\n{$parsed[$key]['content']}";
-      $parsed[$prev_key]['terms'] = array_merge_recursive($parsed[$prev_key]['terms'], $parsed[$key]['terms']);
+    elseif (!empty($prev_heading_id)) {
+      $h = $parsed[$heading_id]['heading'];
+      $parsed[$prev_heading_id]['content'] .= "\n<$h>{$parsed[$heading_id]['title']}</$h>\n{$parsed[$heading_id]['content']}";
+      $parsed[$prev_heading_id]['terms'] = array_merge_recursive($parsed[$prev_heading_id]['terms'], $parsed[$heading_id]['terms']);
 
-      unset($parsed[$key]);
+      unset($parsed[$heading_id]);
     }
   }
 }
 
 function epub_import_save_node($content) {
   global $user;
+  static $ml_stack = array();
+  static $hlevel;
+  static $weight = array();
 
   $node = new stdClass();
   $node->type = variable_get('epub_import_node_type', '');
@@ -394,26 +258,59 @@ function epub_import_save_node($content) {
     'format' => variable_get('epub_import_text_format', 'full_html'),
   );
 
-  if ($book_id = variable_get('epub_import_book_id', 0)) {
-    $node->book['bid'] = $book_id;
+  $node->book['bid'] = $_POST['book_id'];
+
+  if (empty($hlevel)) {
+    $hlevel = (int)substr(variable_get('epub_import_header_level', 'h1'), 1);
   }
+  $level = (int)substr($content['heading'], 1);
+
+  if ($level < $hlevel) {
+    if (isset($ml_stack[$level])) {
+      unset($ml_stack[$level]);
+    }
+    if ($level - 1 > 0) {
+      $node->book['plid'] = $ml_stack[$level - 1];
+    }
+    $push_self = TRUE;
+  }
+  elseif ($level > 1) {
+    $node->book['plid'] = $ml_stack[$level - 1];
+  }
+
+  // Assign weights on top of sibling's weight.
+  if (isset($weight[$level])) {
+    $weight[$level]++;
+
+    // Reset children's weights.
+    if (isset($weight[$level + 1])) unset($weight[$level + 1]);
+    if (isset($weight[$level + 2])) unset($weight[$level + 2]);
+  }
+  else {
+    $weight[$level] = -15; // Book module uses weights between -15 and 15.
+  }
+  $node->book['weight'] = $weight[$level];
 
   _epub_import_attach_terms($node, $content);
 
   node_save($node);
 
-  drupal_set_message(node_type_get_name($node) . ' <em>' . $node->title . '</em> has been created.');
+  if (!empty($push_self)) {
+    $ml_stack[$level] = $node->book['mlid'];
+  }
+
+  watchdog('epub import', node_type_get_name($node) . ' "' . $node->title . '" has been created.');
 }
 
-function _epub_import_attach_terms($node, $content) {
+function _epub_import_attach_terms($node, $parsed) {
   static $import_fields, $vocab_machine_names;
 
   if (!isset($import_fields)) {
     $import_fields = array();
 
-    foreach (variable_get('epub_import_terms', array()) as $key => $val) {
-      if ($val) {
-        list($machine_name, $field_name) = explode(':', $key);
+    foreach (variable_get('epub_import_terms', array()) as $val) {
+      if (!empty($val)) {
+        list($machine_name, $field_name) = explode(':', $val);
         $import_fields[$machine_name] = $field_name;
       }
     }
@@ -421,15 +318,16 @@ function _epub_import_attach_terms($node, $content) {
     $vocab_machine_names = array_keys($import_fields);
   }
 
-  if (!empty($content['terms'])) {
-    foreach ($content['terms'] as $voca => $names) {
-      if (in_array($voca, $vocab_machine_names)) {
+  if (!empty($parsed['terms'])) {
+    foreach ($parsed['terms'] as $field => $names) {
+      if (in_array($field, $import_fields)) {
         $names = array_unique($names);
+        $vocab = array_search($field, $import_fields);
 
         foreach ($names as $name) {
-          if ($term = taxonomy_get_term_by_name($name, $voca)) {
+          if ($term = taxonomy_get_term_by_name($name, $vocab)) {
             $term = reset($term);
-            $node->{$import_fields[$voca]}[LANGUAGE_NONE][] = array('tid' => $term->tid);
+            $node->{$field}[LANGUAGE_NONE][] = array('tid' => $term->tid);
           }
         }
       }
@@ -438,118 +336,146 @@ function _epub_import_attach_terms($node, $content) {
 }
 
 /**
- * Breakdown a parse heading line. Expected format: Section 1.2.3. Example title
+ * Parse heading and title from parsed line.
  */
 function _epub_import_parse_heading($line) {
-  $line = preg_replace('/\s{2,}/', ' ', $line);
-  $line = html_entity_decode($line);
-  return explode(' ', $line, 3);
+  if (preg_match('#^<(h\d)#', $line, $match)) {
+    return array(
+      $match[1],
+      html_entity_decode(strip_tags($line))
+    );
+  }
 }
 
 function _epub_import_get_list_class($line) {
-  if (preg_match('#^<h[456].+</h[456]>$#', $line)) {
-    switch (substr($line, 1, 2)) {
-      case 'h4': return 'L1';
-      case 'h5': return 'L2';
-      case 'h6': return 'L3';
+  // Check if the headings come in as <p> and allow them in.
+  if (preg_match('#^<(p|h\d) class="ol[\w- ]*">(<span class="[\w- ]+">)?([A-Z]|[a-z]|[1-9][0-9]?|[ivx]{1,5})\..+</(p|h\d)>$#', $line, $match)) {
+    if (preg_match('#[A-Z]#', $match[3])) {
+      return array('L1', 'A');
+    }
+    elseif (preg_match('#[1-9][0-9]?#', $match[3])) {
+      return array('L2', '1');
+    }
+    elseif (preg_match('#[a-z]#', $match[3])) {
+      return array('L3', 'a');
+    }
+    elseif (preg_match('#[ivx]{1,5}#', $match[3])) {
+      return array('L4', 'i');
     }
   }
-  // Check if the headings come in as <p> and allow them in.
-  elseif (preg_match('#^<p class="Heading-(\d).+</p>$#', $line, $match)) {
-    switch ($match[1]) {
-      case '4': return 'L1';
-      case '5': return 'L2';
-      case '6': return 'L3';
-      case '7': return 'L4';
-      case '8': return 'L5';
-      case '9': return 'L6';
+  elseif (preg_match('#^<(p|h\d) class="ol-(\d)[\w- ]*">(<span class="[\w- ]+">)?([A-Z]|[a-z]|[1-9][0-9]?|[ivx]{1,5})\..+</(p|h\d)>$#', $line, $match)) {
+    $level = $match[1];
+
+    if (preg_match('#[A-Z]#', $match[4])) {
+      return array('L'.$level, 'A');
     }
+    elseif (preg_match('#[1-9][0-9]?#', $match[4])) {
+      return array('L'.$level, '1');
+    }
+    elseif (preg_match('#[a-z]#', $match[4])) {
+      return array('L'.$level, 'a');
+    }
+    elseif (preg_match('#[ivx]{1,5}#', $match[4])) {
+      return array('L'.$level, 'i');
+    }
+  }
+  elseif (preg_match('#^<p class="ul">.+</p>$#', $line, $match)) {
+    return array('UL', NULL);
+  }
+  elseif (preg_match('#^<(h[456]).+</h[456]>$#', $line, $match)) {
+    return array($match[1], NULL);
   }
   // Class name TOC-* near the ned of file indicates there is no more content.
   elseif (preg_match('/class="TOC[_\-]([^"]+)/', $line, $match)) {
-    return 'EOF';
+    return array('EOF', NULL);
   }
+
+  return array(NULL, NULL);
+}
+
+function _epub_import_render_list($list) {
+  list($list_level, ) = explode(':', $list[0], 2);
+
+  if ($list_level == 'UL') {
+    return _epub_import_render_unordered_list($list);
+  }
+  else {
+    return _epub_import_render_ordered_list($list);
+  }
+}
+
+function _epub_import_render_unordered_list($list) {
+  $output = '<ul>';
+
+  foreach ($list as $item) {
+    if (preg_match('#^UL::#', $item, $match)) {
+      $output .= '<li>' . _epub_import_clean_list_item($item) . '</li>';
+    }
+  }
+
+  $output .= '</ul>';
+
+  return $output;
 }
 
 function _epub_import_render_ordered_list($list) {
   $level = 0;
-  $output = '<ol type="A">';
+
+  list( , $type, ) = explode(':', $list[0], 3);
+  $output = '<ol type="' . $type . '">';
 
   foreach ($list as $item) {
-    $depth = substr($item, 0, 4);
-    // Level 1 (Uppercase)
-    if ($depth == 'L1: ') {
-      $output .= (($level == 1) ? '</li>' :
-                 (($level == 2) ? '</li></ol></li>' :
-                 (($level == 3) ? '</li></ol></li></ol></li>' :
-                 (($level == 4) ? '</li></ol></li></ol></li></ol></li>' :
-                 (($level == 5) ? '</li></ol></li></ol></li></ol></li></ol></li>' :
-                 (($level == 6) ? '</li></ol></li></ol></li></ol></li></ol></li></ol></li>' : ''))))));
+    if (preg_match('#^L\d:[A1ai]:#', $item, $match)) {
+      list($list_level, $list_type) = explode(':', $item, 3);
 
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 1;
-    }
-    // Level 2 (Numbered)
-    elseif ($depth == 'L2: ') {
-      $output .= (($level == 1) ? '<ol type="1">' :
-                 (($level == 2) ? '</li>' :
-                 (($level == 3) ? '</li></ol></li>' :
-                 (($level == 4) ? '</li></ol></li></ol></li>' :
-                 (($level == 5) ? '</li></ol></li></ol></li></ol></li>' :
-                 (($level == 6) ? '</li></ol></li></ol></li></ol></li></ol></li>' : ''))))));
+      // Level 1
+      if ($list_level == 'L1') {
+        $output .= (($level == 1) ? '</li>' :
+                   (($level == 2) ? '</li></ol></li>' :
+                   (($level == 3) ? '</li></ol></li></ol></li>' :
+                   (($level == 4) ? '</li></ol></li></ol></li></ol></li>' : ''))));
 
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 2;
-    }
-    // Level 3 (Lowercase)
-    elseif ($depth == 'L3: ') {
-      $output .= (($level == 2) ? '<ol type="a">' :
-                 (($level == 3) ? '</li>' :
-                 (($level == 4) ? '</li></ol></li>' :
-                 (($level == 5) ? '</li></ol></li></ol></li>' :
-                 (($level == 6) ? '</li></ol></li></ol></li></ol></li>' : '')))));
+        $output .= '<li>' . _epub_import_clean_list_item($item);
+        $level = 1;
+      }
+      // Level 2
+      elseif ($list_level == 'L2') {
+        $output .= (($level == 1) ? '<ol type="' . $list_type . '">' :
+                   (($level == 2) ? '</li>' :
+                   (($level == 3) ? '</li></ol></li>' :
+                   (($level == 4) ? '</li></ol></li></ol></li>' : '' ))));
 
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 3;
-    }
-    // Level 4 (Roman)
-    elseif ($depth == 'L4: ') {
-      $output .= (($level == 3) ? '<ol type="i">' :
-                 (($level == 4) ? '</li>' :
-                 (($level == 5) ? '</li></ol></li>' :
-                 (($level == 6) ? '</li></ol></li></ol></li>' : ''))));
+        $output .= '<li>' . _epub_import_clean_list_item($item);
+        $level = 2;
+      }
+      // Level 3
+      elseif ($list_level == 'L3') {
+        $output .= (($level == 2) ? '<ol type="' . $list_type . '">' :
+                   (($level == 3) ? '</li>' :
+                   (($level == 4) ? '</li></ol></li>' : '')));
 
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 4;
-    }
-    // Level 5 (Lowercase)
-    elseif ($depth == 'L5: ') {
-      $output .= (($level == 4) ? '<ol type="a">' :
-                 (($level == 5) ? '</li>' :
-                 (($level == 6) ? '</li></ol></li>' : '')));
+        $output .= '<li>' . _epub_import_clean_list_item($item);
+        $level = 3;
+      }
+      // Level 4
+      elseif ($list_level == 'L4') {
+        $output .= (($level == 3) ? '<ol type="' . $list_type . '">' :
+                   (($level == 4) ? '</li>' : ''));
 
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 5;
-    }
-    // Level 6 (Lowercase)
-    elseif ($depth == 'L6: ') {
-      $output .= (($level == 5) ? '<ol type="a">' :
-                 (($level == 6) ? '</li>' : ''));
-
-      $output .= '<li>' . _epub_import_clean_list_item($item);
-      $level = 6;
+        $output .= '<li>' . _epub_import_clean_list_item($item);
+        $level = 4;
+      }
     }
     // non-bullet content
     else {
-      $output .= '<p>' . $item . '</p>';
+      $output .= $item;
     }
   }
 
   $output .= (($level == 1) ? '</li>' :
              (($level == 2) ? '</li></ol></li>' :
              (($level == 3) ? '</li></ol></li></ol></li>' :
-             (($level == 4) ? '</li></ol></li></ol></li></ol></li>' :
-             (($level == 5) ? '</li></ol></li></ol></li></ol></li></ol></li>' : '')))));
+             (($level == 4) ? '</li></ol></li></ol></li></ol></li>' : ''))));
 
   $output .= '</ol>';
 
@@ -557,28 +483,30 @@ function _epub_import_render_ordered_list($list) {
 }
 
 function _epub_import_clean_list_item($item) {
-  // Remove 'L#: ' depth indicator.
-  $item = substr(trim($item), 4);
-  $item = str_replace("&#9;", ' ', $item);
+  // Remove level and type.
+  list( , , $line) = explode(':', trim($item), 3);
+  $line = str_replace("&#9;", ' ', $line);
   // Trim unnecessarily enclosing <p> tag.
-  $item = preg_replace('#^<p>(.+)</p>$#', '$1', $item);
+  $line = preg_replace('#^<p>(.+)</p>$#', '$1', $line);
 
-  // lowercase with parenthesis.
-  if ($pos = strpos($item, ')') and $pos <= 2) {
-    list(, $item) = explode(')', $item, 2);
-  }
-  elseif ($pos = strpos($item, '.') and $pos <= 8) {
-    list(, $item) = explode('.', $item, 2);
-  }
-
-  return trim($item);
+  return trim($line);
 }
 
 /**
  * Clean up parsed line.
  */
 function _epub_import_clean_line($line) {
-  static $except = '<table><colgroup><col><thead><tbody><th><tr><td><img><a><em><p><br>';
+  static $except = '<table><colgroup><col><thead><tbody><th><tr><td><img><a><em><strong><p><br><span>';
+
+  if (preg_match('#^<(p|h\d) class="(ol|ol-\d)">(<span class="[\w- ]+">)?([A-Z]|[a-z]|[1-9][0-9]?|[ivx]{1,5})\.(</span>)?(.+)</(p|h\d)>$#', $line, $match)) {
+    $line = trim($match[6]);
+  }
+  elseif (preg_match('#^<p class="ul">(<span class="_idGenBNMarker-[\d]+">.+?</span>)?(.+)</p>$#', $line, $match)) {
+    $line = trim($match[2]);
+  }
+  elseif (preg_match('#^<p class="[\w- ]+">(.+)</p>$#', $line, $match)) {
+    $line = '<p>' . trim($match[1]) . '</p>';
+  }
 
   $line = _epub_import_process_webdings($line);
   $line = strip_tags($line, $except);
@@ -591,17 +519,28 @@ function _epub_import_clean_line($line) {
 }
 
 /**
- * Setter and getter for zoning code unit id currently worked on in order to
- * keep track of it from different locations in the code.
+ * Setter and getter for heading id currently worked on in order to keep track
+ * of it from different locations in the code.
+ *
+ * @return string
+ *   Heading in dot notation such as 1.2.3.
  */
-function _epub_import_current_node_id($unit_id = NULL) {
-  $id = &drupal_static(__FUNCTION__);
+function _epub_import_current_unit_id($heading = NULL) {
+  $heading_id = &drupal_static(__FUNCTION__);
 
-  if ($unit_id) {
-    $id = $unit_id;
+  if (!isset($heading_id)) {
+    $heading_id = array('h1' => 0, 'h2' => 0, 'h3' => 0);
   }
 
-  return $id;
+  if ($heading and in_array($heading, array('h1', 'h2', 'h3'))) {
+    $heading_id[$heading]++;
+
+    for ($h = ++$heading; $h <= 'h3'; $h++) {
+      $heading_id[$h] = 0;
+    }
+  }
+
+  return join('-', array_filter($heading_id));
 }
 
 /**
@@ -620,20 +559,20 @@ function _epub_import_current_file_key($file_key = NULL) {
 /**
  * Parse term names with proper class names.
  */
-function _epub_import_parse_terms(&$content, $line) {
-  preg_match_all('#<span class="' . variable_get('epub_import_class_prefix', '') . '-term-([^"]+)">(.+?)</span>#', $line, $match);
+function _epub_import_parse_terms(&$parsed, $line) {
+  $prefix = variable_get('epub_import_class_prefix', '');
 
-  if (!empty($match[0])) {
-    $vocas = $match[1];
-    $texts = $match[2];
+  if (preg_match_all('#class="' . $prefix . '([\w-]+)">(.+?)<#', $line, $matches)) {
+    $vocas = $matches[1];
+    $texts = $matches[2];
 
     foreach ($vocas as $key => $voca) {
-      if (!isset($content['terms'][$voca])) {
-        $content['terms'][$voca] = array();
+      if (!isset($parsed['terms'][$voca])) {
+        $parsed['terms'][$voca] = array();
       }
 
-      if (!in_array($texts[$key], $content['terms'][$voca])) {
-        $content['terms'][$voca][] = $texts[$key];
+      if (!in_array($texts[$key], $parsed['terms'][$voca])) {
+        $parsed['terms'][$voca][] = $texts[$key];
       }
     }
   }
@@ -718,27 +657,4 @@ function _epub_import_clean_img($line) {
   }
 
   return $line;
-}
-
-function epub_import_get_level($level) {
-  switch ($level) {
-    case 'Sec.': return 'Section';
-    case 'Div.': return 'Division';
-    default:     return $level;
-  }
-}
-
-function epub_import_to_heading($level) {
-  switch ($level) {
-    case 'Article':
-      return 'h1';
-    case 'Div.': 
-    case 'Division':
-      return 'h2';
-    case 'Sec.':
-    case 'Section':
-      return 'h3';
-    default:
-      return $level;
-  }
 }
