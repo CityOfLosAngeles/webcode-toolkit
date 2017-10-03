@@ -5,3 +5,85 @@
  */
 
 include_once 'bookshow.features.inc';
+
+/**
+ * Implements hook_block_info().
+ */
+function bookshow_block_info() {
+  $blocks = array();
+
+  $blocks['bookshow_book_nav'] = array(
+    'info' => t('Webcode Book navigation'),
+  );
+
+  $blocks['bookshow_book_nav_pager'] = array(
+    'info' => t('Webcode Book navigation pager'),
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function bookshow_block_view($delta = '') {
+  $function = $delta . '_block';
+  if (function_exists($function)) {
+    return $function();
+  }
+}
+
+function bookshow_book_nav_block() {
+  $node = menu_get_object();
+  $content = isset($node->book) ? theme('book_navigation', array('book_link' => $node->book)) : '';
+
+  return array('subject' => '', 'content' => $content);
+}
+
+/**
+ * Code borrowed from template_preprocess_book_navigation().
+ * Ctools' implementation combined tree and page in one block. We've splitted it
+ * to 'Webcode Book navigation' and 'Webcode Book navigation pager'
+ */
+function bookshow_book_nav_pager_block() {
+  $node = menu_get_object();
+  $content = '';
+
+  if (!empty($node->book)) {
+    $book_link = $node->book;
+
+    if ($prev = book_prev($book_link)) {
+      $prev_href = url($prev['href']);
+      $prev_title = check_plain($prev['title']);
+
+      $content .=<<<OUT
+        <a href="{$prev_href}" class="page-previous" title="Go to previous page"><i class="fa fa-angle-left" aria-hidden="true"></i> Previous</a>
+OUT;
+    }
+
+    if ($book_link['plid'] && $parent = book_link_load($book_link['plid'])) {
+      $parent_href = url($parent['href']);
+
+      $content .=<<<OUT
+        <a href="{$parent_href}" class="page-up" title="Go to parent page">Up</a>
+OUT;
+    }
+
+    if ($next = book_next($book_link)) {
+      $next_href = url($next['href']);
+      $next_title = check_plain($next['title']);
+
+      $content .=<<<OUT
+        <a href="{$next_href}" class="page-next" title="Go to next page">Next <i class="fa fa-angle-right" aria-hidden="true"></i></a>
+OUT;
+    }
+
+    $content =<<<OUT
+      <div class="page-links clearfix">
+        $content
+      </div>
+OUT;
+  }
+
+  return array('subject' => '', 'content' => $content);
+}
