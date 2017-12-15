@@ -14,17 +14,20 @@ function epub_import_admin_settings() {
     '#collapsed' => FALSE,
   );
 
-  $types = node_type_get_names();
-  $allowed = variable_get('book_allowed_types', array('book'));
-  $types = array_filter($types, function ($val) use ($allowed) {
-    return in_array($val, $allowed);
-  }, ARRAY_FILTER_USE_KEY);
+  $types = array();
+  $bookable = variable_get('book_allowed_types', array());
+  foreach (node_type_get_names() as $type => $label) {
+    if (in_array($type, $bookable)) {
+      $label .= ' (with book outline)';
+    }
+    $types[$type] = $label;
+  }
   $form['content']['epub_import_node_type'] = array(
     '#type' => 'radios',
     '#title' => t('Import Epub as'),
     '#default_value' => variable_get('epub_import_node_type', ''),
     '#options' => $types,
-    '#description' => t('You can enable !books to other content types.', array('!books' => l('book outlines', 'admin/content/book/settings'))),
+    '#description' => module_exists('book') ? t('You can enable !books.', array('!books' => l('book outlines', 'admin/content/book/settings'))) : '',
     '#required' => TRUE,
   );
 
@@ -41,6 +44,13 @@ function epub_import_admin_settings() {
     '#options' => $text_formats,
     '#description' => t('Contents will be created using the text format.'),
     '#required' => TRUE,
+  );
+
+  $form['content']['epub_import_class_prefix'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Class name prefix'),
+    '#description' => t('Class names with the prefix will be imported for styling. Pick a short word with a hyphen or underscore like <code>abc-</code> and add class names in InDesign as <code>abc-warning abc-table-header</code>'),
+    '#default_value' => variable_get('epub_import_class_prefix', ''),
   );
 
   // Fieldset: Images
@@ -82,13 +92,20 @@ function epub_import_admin_settings() {
 
   $term_fields = array();
 
-  if ($fields = field_info_instances('node', variable_get('epub_import_node_type', ''))) {
-    foreach ($fields as $key => $field) {
-      if ($field['display']['default']['module'] == 'taxonomy') {
-        $field_info = field_info_field($key);
+  foreach (node_type_get_names() as $type => $label) {
+    if ($fields = field_info_instances('node', $type)) {
+      foreach ($fields as $key => $field) {
+        if ($field['display']['default']['module'] == 'taxonomy') {
+          $field_info = field_info_field($key);
 
-        if ($field_info['type'] == 'taxonomy_term_reference') {
-          $term_fields[$field_info['settings']['allowed_values'][0]['vocabulary'] . ':' . $field_info['field_name']] = $field['label'] . ' (' . $field_info['field_name'] . ')';
+          if ($field_info['type'] == 'taxonomy_term_reference') {
+            $value = $field_info['settings']['allowed_values'][0]['vocabulary'] . ':' . $field_info['field_name'];
+            $label = $field['label'] . ' (' . $field_info['field_name'] . ')';
+
+            if (!isset($term_fields[$value])) {
+              $term_fields[$value] = $label;
+            }
+          }
         }
       }
     }
@@ -97,18 +114,9 @@ function epub_import_admin_settings() {
   $form['taxonomy']['epub_import_terms'] = array(
     '#type' => 'checkboxes',
     '#title' => t('Taxonomy vocabulary'),
-    '#description' => t('Tagged text in Epub are recognized as terms associated with the node.'),
+    '#description' => t('Tagged text in Epub are recognized as terms associated with the node. Use the internal taxonomy name in parentheses for class name.'),
     '#default_value' => variable_get('epub_import_terms', array()),
     '#options' => $term_fields,
-  );
-
-
-  $form['taxonomy']['epub_import_class_prefix'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Class name prefix'),
-    '#description' => t('Class name prefix used in the Epub file (e.g. taxonomy_field_tags).'),
-    '#default_value' => variable_get('epub_import_class_prefix', ''),
-    '#required' => TRUE,
   );
 
   return system_settings_form($form);

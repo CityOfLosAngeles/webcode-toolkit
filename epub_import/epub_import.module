@@ -61,6 +61,13 @@ function epub_import_menu() {
 function epub_import_is_configured() {
   return (bool)variable_get('epub_import_node_type', '')
       && (bool)variable_get('epub_import_text_format', '')
-      && (bool)variable_get('epub_import_image_style', '')
-      && (bool)variable_get('epub_import_class_prefix', '');
+      && (bool)variable_get('epub_import_image_style', '');
+}
+
+function epub_import_content_type_has_book_outline() {
+  $type = variable_get('epub_import_node_type', '');
+
+  $bookable = variable_get('book_allowed_types', array());
+
+  return in_array($type, $bookable);
 }

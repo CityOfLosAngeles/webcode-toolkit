@@ -35,23 +35,26 @@ INSTR;
     '#description' => t('Hold down Ctrl+Click to select multiple files (⌘+Click on Mac).')
   );
 
-  $options = epub_import_get_books();
 
-  // Add a drop-down to select the destination book.
-  $form['book_id'] = array(
-    '#type' => 'select',
-    '#title' => t('Book'),
-    '#options' => $options,
-    '#description' => t('Choose an existing book to or !create.',
-      array('!create' => l('create a new book', 'node/add/book'))),
-    '#required' => TRUE,
-    '#ajax' => array(
-      'event' => 'change',
-      'wrapper' => 'book-children-wrapper',
-      'callback' => 'epub_import_fill_book_children_callback',
-      'method' => 'replace',
-    ),
-  );
+  if (epub_import_content_type_has_book_outline()) {
+    $options = epub_import_get_books();
+
+    // Add a drop-down to select the destination book.
+    $form['book_id'] = array(
+      '#type' => 'select',
+      '#title' => t('Book'),
+      '#options' => $options,
+      '#description' => t('Choose an existing book or !create.',
+        array('!create' => l('create a new book', 'node/add/book'))),
+      '#required' => TRUE,
+      '#ajax' => array(
+        'event' => 'change',
+        'wrapper' => 'book-children-wrapper',
+        'callback' => 'epub_import_fill_book_children_callback',
+        'method' => 'replace',
+      ),
+    );
+  }
 
   $form['epub_import_header_level'] = array(
     '#type' => 'select',
@@ -65,14 +68,15 @@ INSTR;
     ),
   );
 
+  $options = array('new' => t('Create new content'));
+  if (epub_import_content_type_has_book_outline()) {
+    $options['replace'] = t('Replace existing content');
+  }
   $form['publish_options'] = array(
     '#type' => 'radios',
     '#title' => t('Publishing options'),
     '#default_value' => 'new',
-    '#options' => array(
-      'new' => t('Create new content'),
-      'replace' => t('Replace existing content')
-    ),
+    '#options' => $options,
   );
 
   $form['content_replace_wrapper'] = array(
@@ -182,7 +186,7 @@ function epub_import_import_form_submit($form, $form_state) {
 
   variable_set('epub_import_header_level', $form_state['values']['epub_import_header_level']);
 
-  $book_id = $form_state['values']['book_id'];
+  $book_id = !empty($form_state['values']['book_id']) ? $form_state['values']['book_id'] : NULL;
 
   if ($form_state['values']['publish_options'] == 'replace') {
     if ($book_page_mlid = $form_state['values']['content_replace']) {
@@ -201,25 +205,41 @@ function epub_import_import_form_submit($form, $form_state) {
   }
 
   if ($parse_count == count($form_state['files'])) {
-    $book = node_load($book_id);
-
     drupal_set_message('Epub file imported and parsed successfully.');
-    drupal_set_message(t('@pages created in !book.',
-      array(
-        '@pages' => format_plural($page_count, '1 book page was', '@count book pages were'),
-        '!book' => l($book->title, "node/$book_id")
-      )
-    ));
 
-    drupal_set_message(t('You can !reorder if necessary.',
-      ['!reorder' => l('reorder book structure', "admin/content/book/$book_id")]));
+    if (epub_import_content_type_has_book_outline()) {
+      $book = node_load($book_id);
 
-    watchdog('epub import', t('@pages created in !book.',
-      array(
-        '@pages' => format_plural($page_count, '1 book page was', '@count book pages were'),
-        '!book' => l($book->title, "node/$book_id")
-      )
-    ));
+      drupal_set_message(t('@pages created in !book.',
+        array(
+          '@pages' => format_plural($page_count, '1 book page was', '@count book pages were'),
+          '!book' => l($book->title, "node/$book_id")
+        )
+      ));
+
+      drupal_set_message(t('You can !reorder if necessary.',
+        ['!reorder' => l('reorder book structure', "admin/content/book/$book_id")]));
+
+      watchdog('epub import', t('@pages created in !book.',
+        array(
+          '@pages' => format_plural($page_count, '1 book page was', '@count book pages were'),
+          '!book' => l($book->title, "node/$book_id")
+        )
+      ));
+    }
+    else {
+      drupal_set_message(t('@nodes created.',
+        array(
+          '@nodes' => format_plural($page_count, '1 node was', '@count nodes were')
+        )
+      ));
+
+      watchdog('epub import', t('@nodes created.',
+        array(
+          '@nodes' => format_plural($page_count, '1 node was', '@count nodes were')
+        )
+      ));
+    }
   }
   else {
     drupal_set_message('Some Epub(s) not parsed.', 'error');

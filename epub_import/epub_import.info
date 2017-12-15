@@ -1,6 +1,5 @@
 name = Epub Import
 description = Imports epub documents into content.
 core = 7.x
-version = 7.x-1.0-alpha2
+version = 7.x-1.0-alpha3
 configure = admin/config/content/epub-import/settings
-dependencies[] = book
