@@ -27,7 +27,7 @@ This script automates the process to export the content in the InDesign file as 
 This module allows an Epub file to be uploaded to a Drupal site and have content nodes generated with the text and images content contained within. 
 
 ### Bookshow Module
-The bookshow module extends the epub_import module to take advantage of the display and navigation features made available by the Book module available in Drupal core. Now when Epub content is imported into a Book in Drupal, the Book's navigation is also built out on the fly following the header hierarchy.
+The bookshow module provides sample display options that integrate with other Drupal contributed modules like Panels and Page Manager.
 
 ### InDesign Tagging
 InDesign allows an editor to include a class to specific tags in the document styles. This is done from the Export Tagging screen on the Character Style and Paragraph Style options menu. Using this, it is possible to send custom metadata about the InDesign document to Drupal.
@@ -66,7 +66,7 @@ If you have the dashboard module installed, you may also place a block labeled "
 The import form has the following options:
 
 * Upload file(s): A file upload field that accepts a .epub file.
-* Book: If you have enabled the bookshow module, this option lets you select a Book previously created in Drupal to import the content into.
+* Book: If you have enabled the Book content type, this option lets you select a Book previously created in Drupal to import the content into.
 * Header level: Select the header tag used in your Epub file that will interpreted as node titles in Drupal.
 * Publishing options: This selector lets you decide what to do if duplicate content is discovered (either create new content or replace existing). If you have enabled the bookshow module and selected to replace existing content, you are asked to specify which top level book section you wish to replace.
 
@@ -82,18 +82,18 @@ The following classes are currently supported:
 
 * ol (used for ordered lists)
 * ul (used for unordered lists)
-* taxonomy_* (used for Drupal taxonomy terms; the * is a placeholder for the vocabulary's field name)
+* field_* (used for Drupal taxonomy terms; the * is a placeholder for the vocabulary's name)
 
 ### Epub Import Module
 Once enabled, the module offers the following ways to further customize the feature:
 
 * Import Epub as: Select the content type that should be used when an Epub file is imported.
 * Text format: Select the default Drupal text format for imported text content.
+* Class name prefix: Customize the prefix used for allowed classes in the InDesign Export Settings for Character and Paragraph Styles.
 * Image style: Select the Drupal image style that will be used for imported image content.
 * Images folder: Select the file directory that will be used for imported image content.
 * Header level for each content: Select the InDesign header style that will be used as the break point for each node of content when the Epub file is imported.
 * Taxonomy vocabulary: Select the Drupal taxonomy vocabulary that will be used for imported nodes.
-* Class name prefix: Customize the prefix used for taxonomy terms in the Epub file.
 
 ## Demo
 Coming soon!
@@ -105,4 +105,4 @@ Coming soon!
 ## License
 Released under the GNU General Public License, version 2 (or higher).
 
-Copyright (c) 2017 City of Los Angeles.
+Copyright (c) 2018 City of Los Angeles.
